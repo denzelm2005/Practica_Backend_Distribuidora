@@ -9,7 +9,7 @@ router.get('/categorias', obtenerCategorias);
 // Ruta para registrar las categorias
 router.post('/registrarcategoria', registrarCategoria);
 
-// Ruta para eliminar un cliente por su ID
+// Ruta para eliminar un categoria por su ID
 router.delete('/eliminarcategoria/:id', eliminarCategoria);
 
 router.patch('/actualizarcategoria/:id', actualizarCategoria);
