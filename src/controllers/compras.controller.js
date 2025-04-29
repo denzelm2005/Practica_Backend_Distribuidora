@@ -28,3 +28,26 @@ export const obtenerComprasConDetalles = async (req, res) => {
   }
 };
 
+
+// Obtener todas las compras
+export const obtenerCompras = async (req, res) => {
+  try {
+    const [result] = await pool.query(`
+      SELECT 
+        c.id_compra,
+        c.fecha_compra,
+        CONCAT(e.primer_nombre, ' ', e.primer_apellido) AS nombre_empleado,
+        c.total_compra
+      FROM Compras c
+      INNER JOIN Empleados e ON c.id_empleado = e.id_empleado
+    `);
+    
+    res.json(result);
+  } catch (error) {
+    return res.status(500).json({
+      mensaje: 'Ha ocurrido un error al leer los datos de las compras.',
+      error: error
+    });
+  }
+};
+
