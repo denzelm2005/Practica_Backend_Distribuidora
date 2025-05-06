@@ -46,11 +46,12 @@ export const obtenerCompras = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       mensaje: 'Ha ocurrido un error al leer los datos de las compras.',
-      error: error
+      error: error.message
     });
   }
 };
 
+// Eliminar una compra (los detalles se eliminan automáticamente por ON DELETE CASCADE)
 export const eliminarCompra = async (req, res) => {
   try {
     const { id_compra } = req.params;
@@ -61,7 +62,7 @@ export const eliminarCompra = async (req, res) => {
       return res.status(404).json({ mensaje: 'Compra no encontrada' });
     }
 
-    res.json({ mensaje: 'Compra eliminada correctamente' });
+    res.json({ mensaje: 'Compra y sus detalles eliminados correctamente' });
   } catch (error) {
     return res.status(500).json({
       mensaje: 'Error al eliminar la compra',
@@ -70,7 +71,6 @@ export const eliminarCompra = async (req, res) => {
   }
 };
 
-
 // Registrar una nueva compra con detalles
 export const registrarCompra = async (req, res) => {
   const { id_empleado, fecha_compra, total_compra, detalles } = req.body;
@@ -78,7 +78,7 @@ export const registrarCompra = async (req, res) => {
   try {
     const fechaCompraFormateada = new Date(fecha_compra).toISOString().slice(0, 19).replace('T', ' '); // Convierte a 'YYYY-MM-DD HH:mm:ss'
     const [compraResult] = await pool.query(
-      'INSERT INTO compras (id_empleado, fecha_compra, total_compra) VALUES (?, ?, ?)',
+      'INSERT INTO Compras (id_empleado, fecha_compra, total_compra) VALUES (?, ?, ?)',
       [id_empleado, fechaCompraFormateada, total_compra]
     );
 
@@ -86,7 +86,7 @@ export const registrarCompra = async (req, res) => {
 
     for (const detalle of detalles) {
       await pool.query(
-        'INSERT INTO detalles_compras (id_compra, id_producto, cantidad, precio_unitario) VALUES (?, ?, ?, ?)',
+        'INSERT INTO Detalles_Compras (id_compra, id_producto, cantidad, precio_unitario) VALUES (?, ?, ?, ?)',
         [id_compra, detalle.id_producto, detalle.cantidad, detalle.precio_unitario]
       );
       await pool.query(
@@ -98,5 +98,59 @@ export const registrarCompra = async (req, res) => {
     res.json({ mensaje: 'Compra registrada correctamente' });
   } catch (error) {
     res.status(500).json({ mensaje: 'Error al registrar la compra', error: error.message });
+  }
+};
+
+// Actualizar una compra con sus detalles
+export const actualizarCompra = async (req, res) => {
+  const { id_compra } = req.params;
+  const { id_empleado, fecha_compra, total_compra, detalles } = req.body;
+
+  try {
+    // Formatear la fecha al formato MySQL
+    const fechaCompraFormateada = new Date(fecha_compra).toISOString().slice(0, 19).replace('T', ' ');
+
+    // Actualizar la compra
+    const [compraResult] = await pool.query(
+      'UPDATE Compras SET id_empleado = ?, fecha_compra = ?, total_compra = ? WHERE id_compra = ?',
+      [id_empleado, fechaCompraFormateada, total_compra, id_compra]
+    );
+
+    if (compraResult.affectedRows === 0) {
+      return res.status(404).json({ mensaje: 'Compra no encontrada' });
+    }
+
+    // Obtener detalles actuales para restaurar stock
+    const [detallesActuales] = await pool.query(
+      'SELECT id_producto, cantidad FROM Detalles_Compras WHERE id_compra = ?',
+      [id_compra]
+    );
+
+    // Restaurar stock de productos anteriores (restar porque se elimina la compra previa)
+    for (const detalle of detallesActuales) {
+      await pool.query(
+        'UPDATE Productos SET stock = stock - ? WHERE id_producto = ?',
+        [detalle.cantidad, detalle.id_producto]
+      );
+    }
+
+    // Eliminar detalles actuales
+    await pool.query('DELETE FROM Detalles_Compras WHERE id_compra = ?', [id_compra]);
+
+    // Insertar nuevos detalles y actualizar stock
+    for (const detalle of detalles) {
+      await pool.query(
+        'INSERT INTO Detalles_Compras (id_compra, id_producto, cantidad, precio_unitario) VALUES (?, ?, ?, ?)',
+        [id_compra, detalle.id_producto, detalle.cantidad, detalle.precio_unitario]
+      );
+      await pool.query(
+        'UPDATE Productos SET stock = stock + ? WHERE id_producto = ?',
+        [detalle.cantidad, detalle.id_producto]
+      );
+    }
+
+    res.json({ mensaje: 'Compra actualizada correctamente' });
+  } catch (error) {
+    res.status(500).json({ mensaje: 'Error al actualizar la compra', error: error.message });
   }
 };
