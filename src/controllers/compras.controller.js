@@ -1,5 +1,33 @@
 import { pool } from '../db.js';
 
+// Obtener una compra específica por id_compra
+export const obtenerCompraPorId = async (req, res) => {
+  try {
+    const { id_compra } = req.params;
+
+    const [compra] = await pool.query(`
+      SELECT 
+        id_compra,
+        id_empleado,
+        fecha_compra,
+        total_compra
+      FROM Compras
+      WHERE id_compra = ?
+    `, [id_compra]);
+
+    if (compra.length === 0) {
+      return res.status(404).json({ mensaje: 'Compra no encontrada' });
+    }
+
+    res.json(compra[0]);
+  } catch (error) {
+    return res.status(500).json({
+      mensaje: 'Ha ocurrido un error al obtener los datos de la compra.',
+      error: error.message
+    });
+  }
+};
+
 // Obtener todas las compras con sus detalles, mostrando nombres, IDs y subtotal
 export const obtenerComprasConDetalles = async (req, res) => {
   try {
@@ -28,14 +56,13 @@ export const obtenerComprasConDetalles = async (req, res) => {
   }
 };
 
-
 // Obtener todas las compras
 export const obtenerCompras = async (req, res) => {
   try {
     const [result] = await pool.query(`
       SELECT 
         c.id_compra,
-        c.fecha_compra,
+        DATE_FORMAT(c.fecha_compra, '%d/%m/%Y') AS fecha_compra,
         CONCAT(e.primer_nombre, ' ', e.primer_apellido) AS nombre_empleado,
         c.total_compra
       FROM Compras c
@@ -46,7 +73,7 @@ export const obtenerCompras = async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       mensaje: 'Ha ocurrido un error al leer los datos de las compras.',
-      error: error.message
+      error: error
     });
   }
 };
@@ -76,10 +103,9 @@ export const registrarCompra = async (req, res) => {
   const { id_empleado, fecha_compra, total_compra, detalles } = req.body;
 
   try {
-    const fechaCompraFormateada = new Date(fecha_compra).toISOString().slice(0, 19).replace('T', ' '); // Convierte a 'YYYY-MM-DD HH:mm:ss'
     const [compraResult] = await pool.query(
       'INSERT INTO Compras (id_empleado, fecha_compra, total_compra) VALUES (?, ?, ?)',
-      [id_empleado, fechaCompraFormateada, total_compra]
+      [id_empleado, fecha_compra, total_compra]
     );
 
     const id_compra = compraResult.insertId;
@@ -107,13 +133,10 @@ export const actualizarCompra = async (req, res) => {
   const { id_empleado, fecha_compra, total_compra, detalles } = req.body;
 
   try {
-    // Formatear la fecha al formato MySQL
-    const fechaCompraFormateada = new Date(fecha_compra).toISOString().slice(0, 19).replace('T', ' ');
-
     // Actualizar la compra
     const [compraResult] = await pool.query(
       'UPDATE Compras SET id_empleado = ?, fecha_compra = ?, total_compra = ? WHERE id_compra = ?',
-      [id_empleado, fechaCompraFormateada, total_compra, id_compra]
+      [id_empleado, fecha_compra, total_compra, id_compra]
     );
 
     if (compraResult.affectedRows === 0) {
@@ -126,7 +149,7 @@ export const actualizarCompra = async (req, res) => {
       [id_compra]
     );
 
-    // Restaurar stock de productos anteriores (restar porque se elimina la compra previa)
+    // Restaurar stock de productos anteriores
     for (const detalle of detallesActuales) {
       await pool.query(
         'UPDATE Productos SET stock = stock - ? WHERE id_producto = ?',
